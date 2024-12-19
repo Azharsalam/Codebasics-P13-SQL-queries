@@ -1,23 +1,42 @@
+WITH ActualTripsCTE AS (
+    SELECT 
+        dim_city.city_name AS city,
+        dim_date.month_name AS month,
+        COUNT(fact_trips.trip_id) AS actual_trips,
+        fact_trips.city_id,
+        dim_date.month_id
+    FROM 
+        fact_trips
+    JOIN 
+        dim_city ON fact_trips.city_id = dim_city.city_id
+    JOIN 
+        dim_date ON fact_trips.date = dim_date.date
+    GROUP BY 
+        dim_city.city_name, fact_trips.city_id, dim_date.month_name, dim_date.month_id
+),
+TargetTripsCTE AS (
+    SELECT 
+        city_id,
+        month_id,
+        total_target_trips
+    FROM 
+        targets_db.monthly_target_trips
+)
 SELECT 
-    dim_city.city_name AS city,
-    dim_date.month_name,
-    COUNT(fact_trips.trip_id) AS actual_trips,
-    targets_db.monthly_target_trips.total_target_trips AS target_trips,
+    a.city,
+    a.month,
+    a.actual_trips,
+    t.total_target_trips AS target_trips,
     CASE
-        WHEN COUNT(fact_trips.trip_id) > targets_db.monthly_target_trips.total_target_trips THEN 'Above Target' ELSE 'Below Target'
+        WHEN a.actual_trips > t.total_target_trips THEN 'Above Target'
+        ELSE 'Below Target'
     END AS performance,
-		round(
-				((COUNT(fact_trips.trip_id) - targets_db.monthly_target_trips.total_target_trips) / 
-					targets_db.monthly_target_trips.total_target_trips) * 100, 2) AS percentage_difference
+    ROUND(
+        ((a.actual_trips - t.total_target_trips) / t.total_target_trips) * 100, 2
+    ) AS percentage_difference
 FROM 
-    fact_trips 
+    ActualTripsCTE a
 JOIN 
-    dim_city ON fact_trips.city_id = dim_city.city_id
-JOIN 
-    dim_date ON fact_trips.date = dim_date.date
-JOIN 
-    targets_db.monthly_target_trips  ON fact_trips.city_id = targets_db.monthly_target_trips.city_id 
-GROUP BY 
-    dim_city.city_name, dim_date.month_name, targets_db.monthly_target_trips.total_target_trips
+    TargetTripsCTE t ON a.city_id = t.city_id AND a.month_id = t.month_id
 ORDER BY 
-    dim_city.city_name, dim_date.month_name;
+    a.city, a.month;
